@@ -4,48 +4,47 @@ import { embeddings } from "./embeddings.js";
 
 configDotenv();
 
+function getRecommendations(a, b) {
+  let dotProduct = 0;
+  let normalA = 0;
+  let normalB = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normalA += a[i] * a[i];
+    normalB += b[i] * b[i];
+  }
+
+  if (normalA === 0 || normalB === 0) {
+    return 0;
+  } else {
+    return dotProduct / (Math.sqrt(normalA) * Math.sqrt(normalB));
+  }
+}
 
 async function chat(message) {
   const userQueryEmbedding = await embeddings(message);
 
-  const moviesWithEmbeddings = await Promise.all(
+  const scoredMovies = await Promise.all(
     movies.map(async (movie) => {
       const movieEmbedding = await embeddings(movie.description);
-      return { ...movie, embedding: movieEmbedding };
+      const similarity = getRecommendations(userQueryEmbedding, movieEmbedding);
+      return { ...movie, similarity };
     }),
   );
 
-  const recommendations = moviesWithEmbeddings
-    .map((movie) => {
-      const dotProduct = movie.embedding.reduce(
-        (total, value, dimension) =>
-          total + value * userQueryEmbedding[dimension],
-        0,
-      );
-      
-      const movieMagnitude = Math.hypot(...movie.embedding);
-      const queryMagnitude = Math.hypot(...userQueryEmbedding);
-
-      const similarity =
-        movieMagnitude === 0 || queryMagnitude === 0
-          ? 0
-          : dotProduct / (movieMagnitude * queryMagnitude);
-
-      return { ...movie, similarity };
-    })
-    .sort((left, right) => right.similarity - left.similarity)
-    .slice(0, 5);
-
   console.log("Top 5 recommended movies based on your query:");
 
-  recommendations.forEach((movie, index) => {
-    console.log(
-      `${index + 1}. ${movie.title} - Similarity: ${movie.similarity.toFixed(
-        4,
-      )}`,
-    );
-  });
-
+  scoredMovies
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, 5)
+    .forEach((movie, index) => {
+      console.log(
+        `${index + 1}. ${movie.title} - Similarity: ${movie.similarity.toFixed(
+          4,
+        )}`,
+      );
+    });
 }
 
 await chat("recommend me a movie about Action.");
